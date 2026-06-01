@@ -365,20 +365,38 @@ def index():
 
 @app.route(f'/webhook/{BOT_TOKEN}', methods=['POST'])
 def webhook():
-    update = telebot.types.Update.de_json(request.stream.read().decode('utf-8'))
-    bot.process_new_updates([update])
+    try:
+        json_str = request.get_data(as_text=True)
+        update = telebot.types.Update.de_json(json_str)
+        bot.process_new_updates([update])
+    except Exception as e:
+        print(f"Webhook error: {e}")
     return jsonify({'ok': True})
+
+@app.route('/set_webhook')
+def set_webhook():
+    RENDER_URL = os.environ.get('RENDER_URL', '')
+    if RENDER_URL:
+        bot.remove_webhook()
+        result = bot.set_webhook(url=f"{RENDER_URL}/webhook/{BOT_TOKEN}")
+        return jsonify({'ok': result, 'webhook': f"{RENDER_URL}/webhook/{BOT_TOKEN}"})
+    return jsonify({'ok': False, 'msg': 'RENDER_URL not set'})
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
-    # Set webhook
     RENDER_URL = os.environ.get('RENDER_URL', '')
     if RENDER_URL:
         bot.remove_webhook()
         bot.set_webhook(url=f"{RENDER_URL}/webhook/{BOT_TOKEN}")
         print(f"Webhook set: {RENDER_URL}/webhook/{BOT_TOKEN}")
-        app.run(host='0.0.0.0', port=port)
-    else:
-        print("Polling mode...")
-        bot.remove_webhook()
-        bot.polling(none_stop=True)
+    app.run(host='0.0.0.0', port=port)
+else:
+    # For gunicorn - set webhook on import
+    RENDER_URL = os.environ.get('RENDER_URL', '')
+    if RENDER_URL:
+        try:
+            bot.remove_webhook()
+            bot.set_webhook(url=f"{RENDER_URL}/webhook/{BOT_TOKEN}")
+            print(f"Webhook set on startup: {RENDER_URL}/webhook/{BOT_TOKEN}")
+        except Exception as e:
+            print(f"Webhook setup error: {e}")
